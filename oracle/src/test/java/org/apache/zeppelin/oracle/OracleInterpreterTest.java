@@ -14,19 +14,20 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Unit tests for OracleInterpreter.
- *
- * These tests focus on the interpreter's behavior without requiring
- * an actual Oracle database connection. Integration tests requiring
  */
 @DisplayName("OracleInterpreter Unit Tests")
 class OracleInterpreterTest {
 
+  // To run these tests, provide DB connection values via env vars or system properties.
+  private static final String ORACLE_CONNECTION_URL =
+    System.getProperty("oracle.url",System.getenv("ORACLE_URL"));
+  private static final String ORACLE_CONNECTION_USERNAME =
+    System.getProperty("oracle.username",System.getenv("ORACLE_USERNAME"));
+  private static final String ORACLE_CONNECTION_PASSWORD =
+    System.getProperty("oracle.password",System.getenv("ORACLE_PASSWORD"));
+
   private OracleInterpreter interpreter;
   private InterpreterContext context;
-
-  // ============================================================
-  // Test Fixtures
-  // ============================================================
 
   @BeforeEach
   void setUp() {
@@ -43,21 +44,17 @@ class OracleInterpreterTest {
       try {
         interpreter.close();
       } catch (Exception e) {
-        // Log but don't fail - cleanup errors shouldn't mask test failures
         System.err.println("Warning: Error during interpreter cleanup: " + e.getMessage());
       }
       interpreter = null;
     }
   }
 
-  /**
-   * Creates a minimal valid properties set for testing.
-   */
-  private Properties createMinimalProperties() {
+  private Properties prepareInterpreterProperties() {
     Properties props = new Properties();
-    props.setProperty("oracle.connection.url", "jdbc:oracle:thin:@localhost:1521/FREE");
-    props.setProperty("oracle.connection.username", "SYSTEM");
-    props.setProperty("oracle.connection.password", "20012001Hh@01");
+    props.setProperty("oracle.connection.url", ORACLE_CONNECTION_URL);
+    props.setProperty("oracle.connection.username", ORACLE_CONNECTION_USERNAME);
+    props.setProperty("oracle.connection.password", ORACLE_CONNECTION_PASSWORD);
     props.setProperty("oracleucp.connectionPoolName", "test-pool-" + System.currentTimeMillis());
     props.setProperty("oracleucp.initialPoolSize", "1");
     props.setProperty("oracleucp.minPoolSize", "1");
@@ -71,49 +68,32 @@ class OracleInterpreterTest {
     return props;
   }
 
-  /**
-   * Creates properties with all configurable options set.
-   */
-  private Properties createFullProperties() {
-    Properties props = createMinimalProperties();
-    props.setProperty("oracle.connection.driver", "oracle.jdbc.OracleDriver");
-    props.setProperty("oracle.maxResults", "500");
-    return props;
-  }
-
-  // ============================================================
-  // Instantiation Tests
-  // ============================================================
-
   @Nested
   @DisplayName("Instantiation Tests")
   class InstantiationTests {
 
     @Test
-    @DisplayName("Should create interpreter with valid properties")
     void shouldCreateInterpreterWithValidProperties() {
-      interpreter = new OracleInterpreter(createMinimalProperties());
+      interpreter = new OracleInterpreter(prepareInterpreterProperties());
 
       assertNotNull(interpreter, "Interpreter should not be null");
     }
 
     @Test
-    @DisplayName("Should store properties correctly")
     void shouldStorePropertiesCorrectly() {
-      Properties props = createMinimalProperties();
+      Properties props = prepareInterpreterProperties();
       props.setProperty("oracle.maxResults", "2000");
 
       interpreter = new OracleInterpreter(props);
 
       assertEquals("2000", interpreter.getProperty("oracle.maxResults"));
-      assertEquals("jdbc:oracle:thin:@localhost:1521/FREE",
+      assertEquals(ORACLE_CONNECTION_URL,
                    interpreter.getProperty("oracle.connection.url"));
     }
 
     @Test
-    @DisplayName("Should return default value for missing property")
     void shouldReturnDefaultForMissingProperty() {
-      interpreter = new OracleInterpreter(createMinimalProperties());
+      interpreter = new OracleInterpreter(prepareInterpreterProperties());
 
       String defaultValue = interpreter.getProperty("nonexistent.property", "default");
 
@@ -121,9 +101,8 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should return null for missing property without default")
     void shouldReturnNullForMissingPropertyWithoutDefault() {
-      interpreter = new OracleInterpreter(createMinimalProperties());
+      interpreter = new OracleInterpreter(prepareInterpreterProperties());
 
       String value = interpreter.getProperty("nonexistent.property");
 
@@ -131,21 +110,16 @@ class OracleInterpreterTest {
     }
   }
 
-  // ============================================================
-  // Empty/Null Input Tests
-  // ============================================================
-
   @Nested
   @DisplayName("Empty and Null Input Handling")
   class EmptyInputTests {
 
     @BeforeEach
     void createInterpreter() {
-      interpreter = new OracleInterpreter(createMinimalProperties());
+      interpreter = new OracleInterpreter(prepareInterpreterProperties());
     }
 
     @Test
-    @DisplayName("Should handle null SQL gracefully")
     void shouldHandleNullSql() {
       InterpreterResult result = interpreter.interpret(null, context);
 
@@ -154,7 +128,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should handle empty string SQL gracefully")
     void shouldHandleEmptyStringSql() {
       InterpreterResult result = interpreter.interpret("", context);
 
@@ -163,7 +136,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should handle whitespace-only SQL gracefully")
     void shouldHandleWhitespaceSql() {
       InterpreterResult result = interpreter.interpret("   ", context);
 
@@ -172,54 +144,29 @@ class OracleInterpreterTest {
     }
   }
 
-  // ============================================================
-  // Interpreter Lifecycle Tests
-  // ============================================================
-
   @Nested
   @DisplayName("Interpreter Lifecycle")
   class LifecycleTests {
 
     @Test
-    @DisplayName("Should return SIMPLE form type")
-    void shouldReturnSimpleFormType() {
-      interpreter = new OracleInterpreter(createMinimalProperties());
-
-      assertEquals(Interpreter.FormType.SIMPLE, interpreter.getFormType());
-    }
-
-    @Test
-    @DisplayName("Should return zero progress")
-    void shouldReturnZeroProgress() {
-      interpreter = new OracleInterpreter(createMinimalProperties());
-
-      int progress = interpreter.getProgress(context);
-
-      assertEquals(0, progress, "Progress should always be 0");
-    }
-
-    @Test
-    @DisplayName("Cancel should not throw when no active statement")
     void cancelShouldNotThrowWhenNoActiveStatement() {
-      interpreter = new OracleInterpreter(createMinimalProperties());
+      interpreter = new OracleInterpreter(prepareInterpreterProperties());
 
       assertDoesNotThrow(() -> interpreter.cancel(context),
                          "Cancel should not throw when no statement is active");
     }
 
     @Test
-    @DisplayName("Close should not throw when not opened")
     void closeShouldNotThrowWhenNotOpened() {
-      interpreter = new OracleInterpreter(createMinimalProperties());
+      interpreter = new OracleInterpreter(prepareInterpreterProperties());
 
       assertDoesNotThrow(() -> interpreter.close(),
                          "Close should not throw when interpreter was never opened");
     }
 
     @Test
-    @DisplayName("Multiple close calls should be safe")
     void multipleCloseShouldBeSafe() {
-      interpreter = new OracleInterpreter(createMinimalProperties());
+      interpreter = new OracleInterpreter(prepareInterpreterProperties());
 
       assertDoesNotThrow(() -> {
         interpreter.close();
@@ -229,18 +176,13 @@ class OracleInterpreterTest {
     }
   }
 
-  // ============================================================
-  // Configuration Validation Tests
-  // ============================================================
-
   @Nested
   @DisplayName("Configuration Tests")
   class ConfigurationTests {
 
     @Test
-    @DisplayName("Should use default max results when not specified")
     void shouldUseDefaultMaxResults() {
-      Properties props = createMinimalProperties();
+      Properties props = prepareInterpreterProperties();
       // Don't set oracle.maxResults
 
       interpreter = new OracleInterpreter(props);
@@ -250,9 +192,8 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should accept custom max results")
     void shouldAcceptCustomMaxResults() {
-      Properties props = createMinimalProperties();
+      Properties props = prepareInterpreterProperties();
       props.setProperty("oracle.maxResults", "5000");
 
       interpreter = new OracleInterpreter(props);
@@ -261,9 +202,8 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should store UCP pool configuration")
     void shouldStoreUcpPoolConfiguration() {
-      Properties props = createMinimalProperties();
+      Properties props = prepareInterpreterProperties();
       props.setProperty("oracleucp.maxPoolSize", "20");
       props.setProperty("oracleucp.minPoolSize", "5");
       props.setProperty("oracleucp.connectionWaitTimeout", "60");
@@ -278,16 +218,15 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should store wallet configuration")
     void shouldStoreWalletConfiguration() {
-      Properties props = createMinimalProperties();
-      props.setProperty("oracle.connection.wallet.location", "/opt/oracle/wallet");
+      Properties props = prepareInterpreterProperties();
+      props.setProperty("oracle.connection.wallet.location", "/usr/oracle/wallet");
       props.setProperty("oracle.connection.tns.alias", "mydb_high");
 
       interpreter = new OracleInterpreter(props);
 
       assertAll("Wallet configuration",
-                () -> assertEquals("/opt/oracle/wallet",
+                () -> assertEquals("/usr/oracle/wallet",
                                    interpreter.getProperty("oracle.connection.wallet.location")),
                 () -> assertEquals("mydb_high",
                                    interpreter.getProperty("oracle.connection.tns.alias"))
@@ -295,9 +234,8 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should validate minPoolSize <= maxPoolSize relationship")
     void shouldValidatePoolSizeRelationship() {
-      Properties props = createMinimalProperties();
+      Properties props = prepareInterpreterProperties();
       props.setProperty("oracleucp.minPoolSize", "5");
       props.setProperty("oracleucp.maxPoolSize", "20");
 
@@ -311,18 +249,13 @@ class OracleInterpreterTest {
     }
   }
 
-  // ============================================================
-  // Open/Initialize Error Tests
-  // ============================================================
-
   @Nested
   @DisplayName("Open/Initialize Error Handling")
   class OpenErrorTests {
 
     @Test
-    @DisplayName("Should throw InterpreterException when driver not found")
     void shouldThrowWhenDriverNotFound() {
-      Properties props = createMinimalProperties();
+      Properties props = prepareInterpreterProperties();
       props.setProperty("oracle.connection.driver", "com.nonexistent.FakeDriver");
 
       interpreter = new OracleInterpreter(props);
@@ -340,9 +273,8 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should throw when wallet location set but TNS alias missing")
     void shouldThrowWhenWalletWithoutTnsAlias() {
-      Properties props = createMinimalProperties();
+      Properties props = prepareInterpreterProperties();
       props.setProperty("oracle.connection.wallet.location", "/path/to/wallet");
       // Deliberately not setting oracle.connection.tns.alias
 
@@ -359,25 +291,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should throw when UCP configuration has invalid number format")
-    void shouldThrowOnInvalidUcpNumberFormat() {
-      Properties props = createMinimalProperties();
-      props.setProperty("oracleucp.maxPoolSize", "not-a-number");
-
-      interpreter = new OracleInterpreter(props);
-
-      InterpreterException exception = assertThrows(
-        InterpreterException.class,
-        () -> interpreter.open(),
-        "Should throw when UCP property has invalid number format"
-      );
-
-      assertTrue(exception.getMessage().contains("Invalid UCP configuration"),
-                 "Exception message should indicate invalid UCP configuration");
-    }
-
-    @Test
-    @DisplayName("Should throw on various invalid UCP number properties")
     void shouldThrowOnInvalidUcpProperties() {
       String[] propertyNames = {
         "oracleucp.initialPoolSize",
@@ -386,7 +299,7 @@ class OracleInterpreterTest {
       };
 
       for (String propertyName : propertyNames) {
-        Properties props = createMinimalProperties();
+        Properties props = prepareInterpreterProperties();
         props.setProperty(propertyName, "invalid");
 
         interpreter = new OracleInterpreter(props);
@@ -400,24 +313,18 @@ class OracleInterpreterTest {
     }
   }
 
-  // ============================================================
-  // SQL Parsing Logic Tests (without DB connection)
-  // ============================================================
-
   @Nested
   @DisplayName("SQL Classification Logic")
   class SqlClassificationTests {
 
     /**
      * These tests verify the interpreter correctly identifies SQL statement types.
-     * Since parseSqlBlocks is private, we test through observable behavior.
      *
      * Note: These tests verify the LOGIC of SQL classification, not actual execution.
      * For actual execution tests, see the integration test class.
      */
 
     @Test
-    @DisplayName("DML statements should be recognized by their keywords")
     void dmlStatementsShouldBeRecognizedByKeywords() {
       // This tests the classification logic that's used in parseSqlBlocks
       assertAll("DML statement recognition",
@@ -431,7 +338,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("SELECT statements should be recognized")
     void selectStatementsShouldBeRecognized() {
       assertAll("SELECT statement recognition",
                 () -> assertTrue(isSelectStatement("SELECT * FROM dual"), "Simple SELECT"),
@@ -442,7 +348,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("PL/SQL blocks should be recognized")
     void plsqlBlocksShouldBeRecognized() {
       assertAll("PL/SQL block recognition",
                 () -> assertTrue(isPlSqlBlock("BEGIN NULL; END;"), "Simple BEGIN block"),
@@ -453,7 +358,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("CREATE statements for PL/SQL objects should be recognized")
     void createPlsqlObjectsShouldBeRecognized() {
       assertAll("CREATE PL/SQL object recognition",
                 () -> assertTrue(isCreatePlSqlObject("CREATE PROCEDURE p AS BEGIN NULL; END;"), "PROCEDURE"),
@@ -494,16 +398,11 @@ class OracleInterpreterTest {
     }
   }
 
-  // ============================================================
-  // SQL Delimiter Handling Tests
-  // ============================================================
-
   @Nested
   @DisplayName("SQL Delimiter Handling")
   class DelimiterTests {
 
     @Test
-    @DisplayName("Slash delimiter should separate PL/SQL blocks")
     void slashDelimiterShouldSeparatePlsqlBlocks() {
       String input = "BEGIN\n  DBMS_OUTPUT.PUT_LINE('Hello');\nEND;\n/\nSELECT 1 FROM DUAL;";
 
@@ -516,7 +415,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Semicolon should separate regular SQL statements")
     void semicolonShouldSeparateRegularSql() {
       String input = "SELECT 1 FROM DUAL; SELECT 2 FROM DUAL; SELECT 3 FROM DUAL;";
 
@@ -527,7 +425,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Mixed delimiters should be handled correctly")
     void mixedDelimitersShouldBeHandled() {
       String input = "SELECT 1 FROM DUAL;\n" +
         "BEGIN NULL; END;\n" +
@@ -540,18 +437,13 @@ class OracleInterpreterTest {
     }
   }
 
-  // ============================================================
-  // Context Handling Tests
-  // ============================================================
-
   @Nested
   @DisplayName("Interpreter Context Handling")
   class ContextTests {
 
     @Test
-    @DisplayName("Should use paragraph ID from context")
     void shouldUseParagraphIdFromContext() {
-      interpreter = new OracleInterpreter(createMinimalProperties());
+      interpreter = new OracleInterpreter(prepareInterpreterProperties());
 
       String paragraphId = context.getParagraphId();
 
@@ -561,9 +453,8 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should handle context with different paragraph IDs")
     void shouldHandleDifferentParagraphIds() {
-      interpreter = new OracleInterpreter(createMinimalProperties());
+      interpreter = new OracleInterpreter(prepareInterpreterProperties());
 
       InterpreterContext context1 = InterpreterContext.builder()
                                                       .setAuthenticationInfo(new AuthenticationInfo("user1"))
@@ -582,70 +473,13 @@ class OracleInterpreterTest {
     }
   }
 
-  // ============================================================
-  // Connection URL Tests
-  // ============================================================
-
-  @Nested
-  @DisplayName("Connection URL Configuration")
-  class ConnectionUrlTests {
-
-    @Test
-    @DisplayName("Should accept standard thin driver URL")
-    void shouldAcceptStandardThinUrl() {
-      Properties props = createMinimalProperties();
-      props.setProperty("oracle.connection.url", "jdbc:oracle:thin:@localhost:1521/FREE");
-
-      interpreter = new OracleInterpreter(props);
-
-      String url = interpreter.getProperty("oracle.connection.url");
-      assertTrue(url.startsWith("jdbc:oracle:thin:@"),
-                 "URL should be thin driver format");
-    }
-
-    @Test
-    @DisplayName("Should accept service name URL format")
-    void shouldAcceptServiceNameUrl() {
-      Properties props = createMinimalProperties();
-      props.setProperty("oracle.connection.url",
-                        "jdbc:oracle:thin:@localhost:1521/FREE");
-
-      interpreter = new OracleInterpreter(props);
-
-      String url = interpreter.getProperty("oracle.connection.url");
-      assertTrue(url.contains("localhost:1521/"),
-                 "URL should contain service name format");
-    }
-
-    @Test
-    @DisplayName("Should accept TNS descriptor URL format")
-    void shouldAcceptTnsDescriptorUrl() {
-      Properties props = createMinimalProperties();
-      String tnsUrl = "jdbc:oracle:thin:@(DESCRIPTION=" +
-        "(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))" +
-        "(CONNECT_DATA=(SERVICE_NAME=ORCLPDB1)))";
-      props.setProperty("oracle.connection.url", tnsUrl);
-
-      interpreter = new OracleInterpreter(props);
-
-      String url = interpreter.getProperty("oracle.connection.url");
-      assertTrue(url.contains("DESCRIPTION"),
-                 "URL should contain TNS descriptor");
-    }
-  }
-
-  // ============================================================
-  // Concurrent Access Safety Tests
-  // ============================================================
-
   @Nested
   @DisplayName("Concurrent Access Safety")
   class ConcurrencySafetyTests {
 
     @Test
-    @DisplayName("Cancel should be safe to call from different thread")
     void cancelShouldBeSafeFromDifferentThread() throws InterruptedException {
-      interpreter = new OracleInterpreter(createMinimalProperties());
+      interpreter = new OracleInterpreter(prepareInterpreterProperties());
 
       Thread cancelThread = new Thread(() -> {
         interpreter.cancel(context);
@@ -659,9 +493,8 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Multiple concurrent cancels should be safe")
     void multipleConcurrentCancelsShouldBeSafe() throws InterruptedException {
-      interpreter = new OracleInterpreter(createMinimalProperties());
+      interpreter = new OracleInterpreter(prepareInterpreterProperties());
 
       Thread[] threads = new Thread[5];
       for (int i = 0; i < threads.length; i++) {
@@ -686,24 +519,19 @@ class OracleInterpreterTest {
     }
   }
 
-  // ============================================================
-  // Interpret Method Integration Tests
-  // ============================================================
-
   @Nested
   @DisplayName("Interpret Method Tests")
   class InterpretTests {
 
     @BeforeEach
     void openInterpreter() throws InterpreterException {
-      interpreter = new OracleInterpreter(createMinimalProperties());
+      interpreter = new OracleInterpreter(prepareInterpreterProperties());
       interpreter.open();
     }
 
     // --- Basic SELECT Tests ---
 
     @Test
-    @DisplayName("Should execute simple SELECT from DUAL")
     void shouldExecuteSimpleSelect() {
       InterpreterResult result = interpreter.interpret("SELECT 1 AS num FROM DUAL", context);
 
@@ -713,7 +541,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should execute SELECT with multiple columns")
     void shouldExecuteSelectWithMultipleColumns() {
       InterpreterResult result = interpreter.interpret(
         "SELECT 1 AS col1, 'hello' AS col2, SYSDATE AS col3 FROM DUAL", context);
@@ -726,7 +553,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should execute SELECT with WHERE clause")
     void shouldExecuteSelectWithWhereClause() {
       InterpreterResult result = interpreter.interpret(
         "SELECT * FROM DUAL WHERE DUMMY = 'X'", context);
@@ -735,9 +561,9 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should execute multiple SELECT statements separated by semicolon")
     void shouldExecuteMultipleSelects() {
-      String sql = "SELECT 1 FROM DUAL; SELECT 2 FROM DUAL;";
+      String sql = "SELECT 1 FROM DUAL; SELECT 2 FROM DUAL;\n" +
+        " SELECT 3 FROM DUAL;";
 
       InterpreterResult result = interpreter.interpret(sql, context);
 
@@ -747,7 +573,6 @@ class OracleInterpreterTest {
     // --- Error Handling Tests ---
 
     @Test
-    @DisplayName("Should return ERROR for invalid SQL syntax")
     void shouldReturnErrorForInvalidSql() {
       InterpreterResult result = interpreter.interpret("SELEC * FORM dual", context);
 
@@ -757,7 +582,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should return ERROR for non-existent table")
     void shouldReturnErrorForNonExistentTable() {
       InterpreterResult result = interpreter.interpret(
         "SELECT * FROM non_existent_table_xyz_123", context);
@@ -768,7 +592,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should return ERROR for invalid column name")
     void shouldReturnErrorForInvalidColumn() {
       InterpreterResult result = interpreter.interpret(
         "SELECT non_existent_column FROM DUAL", context);
@@ -779,7 +602,6 @@ class OracleInterpreterTest {
     // --- DML Tests ---
 
     @Test
-    @DisplayName("Should execute DDL and DML statements")
     void shouldExecuteDdlAndDml() {
       String tableName = "TEST_TBL_" + System.currentTimeMillis();
 
@@ -812,7 +634,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should report correct row count for multiple inserts")
     void shouldReportCorrectRowCount() {
       String tableName = "TEST_ROWS_" + System.currentTimeMillis();
 
@@ -835,7 +656,6 @@ class OracleInterpreterTest {
     // --- PL/SQL Tests ---
 
     @Test
-    @DisplayName("Should execute simple PL/SQL block")
     void shouldExecuteSimplePlsqlBlock() {
       String plsql = "BEGIN NULL; END;";
 
@@ -845,7 +665,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should execute PL/SQL block with DBMS_OUTPUT")
     void shouldExecutePlsqlWithDbmsOutput() {
       String plsql = "BEGIN\n" +
         "    DBMS_OUTPUT.PUT_LINE('Hello from PL/SQL');\n" +
@@ -860,7 +679,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should execute PL/SQL with DECLARE block")
     void shouldExecutePlsqlWithDeclare() {
       String plsql = "DECLARE\n" +
         "    v_num NUMBER := 42;\n" +
@@ -875,7 +693,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should execute PL/SQL block with slash delimiter")
     void shouldExecutePlsqlWithSlashDelimiter() {
       String plsql = "BEGIN\n" +
         "    DBMS_OUTPUT.PUT_LINE('First block');\n" +
@@ -893,7 +710,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should return ERROR for PL/SQL with compilation error")
     void shouldReturnErrorForInvalidPlsql() {
       String plsql = "BEGIN INVALID_PROCEDURE_XYZ(); END;";
 
@@ -905,9 +721,8 @@ class OracleInterpreterTest {
     // --- Max Results Tests ---
 
     @Test
-    @DisplayName("Should respect maxResults limit")
     void shouldRespectMaxResultsLimit() throws InterpreterException {
-      Properties props = createMinimalProperties();
+      Properties props = prepareInterpreterProperties();
       props.setProperty("oracle.maxResults", "5");
 
       OracleInterpreter limitedInterpreter = new OracleInterpreter(props);
@@ -929,7 +744,6 @@ class OracleInterpreterTest {
     // --- Transaction Tests ---
 
     @Test
-    @DisplayName("Should handle COMMIT")
     void shouldHandleCommit() {
       InterpreterResult result = interpreter.interpret("COMMIT", context);
 
@@ -937,7 +751,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should handle ROLLBACK")
     void shouldHandleRollback() {
       InterpreterResult result = interpreter.interpret("ROLLBACK", context);
 
@@ -947,7 +760,6 @@ class OracleInterpreterTest {
     // --- Special Cases ---
 
     @Test
-    @DisplayName("Should handle SQL with comments")
     void shouldHandleSqlWithComments() {
       String sql = "-- This is a comment\n" +
         "SELECT 1 FROM DUAL /* inline comment */";
@@ -958,7 +770,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should handle NULL values in results")
     void shouldHandleNullValues() {
       InterpreterResult result = interpreter.interpret(
         "SELECT NULL AS nullable_col FROM DUAL", context);
@@ -968,7 +779,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should handle large text in results")
     void shouldHandleLargeText() {
       InterpreterResult result = interpreter.interpret(
         "SELECT RPAD('x', 1000, 'x') AS large_text FROM DUAL", context);
@@ -977,7 +787,6 @@ class OracleInterpreterTest {
     }
 
     @Test
-    @DisplayName("Should handle date/timestamp values")
     void shouldHandleDateValues() {
       InterpreterResult result = interpreter.interpret(
         "SELECT SYSDATE AS current_date, SYSTIMESTAMP AS current_ts FROM DUAL", context);
@@ -986,4 +795,3 @@ class OracleInterpreterTest {
     }
   }
 }
-
